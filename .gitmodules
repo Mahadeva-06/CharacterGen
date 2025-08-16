@@ -1,0 +1,6 @@
+[submodule "PyMeshLab"]
+	path = PyMeshLab
+	url = https://github.com/PyMeshLab/PyMeshLab.git
+[submodule "diffusers"]
+	path = diffusers
+	url = https://github.com/huggingface/diffusers.git

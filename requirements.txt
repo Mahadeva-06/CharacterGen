@@ -1,0 +1,28 @@
+gradio==4.15.0
+rm_anime_bg
+# for 2D_stage
+#torch==2.7.1+cu118
+#torchvision==0.22.1+cu118
+#xformers==0.0.31.post1
+#numpy==2.0.2
+#ninja
+accelerate==0.24.1
+transformers==4.36.2
+diffusers==0.27.2
+huggingface_hub==0.20.3
+safetensors==0.6.1
+ipdb
+einops==0.8.1
+omegaconf
+imageio
+onnxruntime
+# for 3D_stage
+pytorch_lightning
+jaxtyping
+wandb
+lpips
+git+https://github.com/NVlabs/nvdiffrast
+open3d
+trimesh
+pymeshlab
+pygltflib
