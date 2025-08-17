@@ -68,14 +68,8 @@ device_capability = -1
 #bfloat Support is typically 8 or higher.
 def check_bfloat16_support():
    # Check if bfloat16 is supported
-   device_capability = torch.cuda.get_device_capability()
-
-   if device_capability[0] >= 8:
-       print("CUDA device capability is above 8, using float16.")
-       return torch.float16
-   else:
-       print("CUDA device capability is below 8, using float 32.")
-       return torch.float32
+    print("Forcing float32 for CPU-only mode.")
+    return torch.float32
 
 #7-23-2024 Changed to allow GPU with compute < 8
 data_type_float = check_bfloat16_support()
@@ -96,9 +90,6 @@ class rm_bg_api:
             repo_id="skytnt/anime-seg", filename="isnetis.onnx",
         )
         providers: list[str] = ["CPUExecutionProvider"]
-        if not force_cpu and "CUDAExecutionProvider" in rt.get_available_providers():
-            providers = ["CUDAExecutionProvider"]
-
         self.session_infer = rt.InferenceSession(
             session_infer_path, providers=providers,
         )
@@ -200,14 +191,14 @@ class Inference2D_API:
         use_pose_guider=False,
         use_shifted_noise=False,
         use_noise=True,
-        device="cuda"
+    device="cpu"
     ):
         print("  [2D_API] Start init")
         self.validation = validation
         self.use_noise = use_noise
         self.use_shifted_noise = use_shifted_noise
         self.unet_condition_type = unet_condition_type
-        self.device = device
+    self.device = device
         if unet_from_pretrained_kwargs is None:
             unet_from_pretrained_kwargs = {}
 
@@ -265,14 +256,14 @@ class Inference2D_API:
         print("  [2D_API] Loading ref_unet state dict...")
         ref_unet.load_state_dict(ref_unet_params, strict=False)
 
-        weight_dtype = torch.float16
+    weight_dtype = torch.float32
 
         print("  [2D_API] Moving models to device...")
-        text_encoder.to(device, dtype=weight_dtype)
-        image_encoder.to(device, dtype=weight_dtype)
-        vae.to(device, dtype=weight_dtype)
-        ref_unet.to(device, dtype=weight_dtype)
-        unet.to(device, dtype=weight_dtype)
+    text_encoder.to(self.device, dtype=weight_dtype)
+    image_encoder.to(self.device, dtype=weight_dtype)
+    vae.to(self.device, dtype=weight_dtype)
+    ref_unet.to(self.device, dtype=weight_dtype)
+    unet.to(self.device, dtype=weight_dtype)
 
         vae.requires_grad_(False)
         unet.requires_grad_(False)
@@ -288,7 +279,7 @@ class Inference2D_API:
         )
         self.validation_pipeline.enable_vae_slicing()
         self.validation_pipeline.set_progress_bar_config(disable=True)
-        self.generator = torch.Generator(device=device)
+    self.generator = torch.Generator(device=self.device)
         print("  [2D_API] Init complete")
 
     @torch.no_grad()
@@ -311,10 +302,8 @@ class Inference2D_API:
                     pose_image = Image.open(os.path.join(input_path, lm[1]))
                     crop_area = (128, 0, 640, 768)
                     pose_images.append(totensor(np.array(pose_image.crop(crop_area)).astype(np.float32)) / 255.)
-                # choose device consistently (use CUDA if available)
-                target_device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-                camera_matrixs = torch.stack(cameras).unsqueeze(0).to(target_device)
-                pose_imgs_in = torch.stack(pose_images).to(target_device)
+            camera_matrixs = torch.stack(cameras).unsqueeze(0).to(self.device)
+            pose_imgs_in = torch.stack(pose_images).to(self.device)
             prompts = "high quality, best quality"
             prompt_ids = self.tokenizer(
                 prompts, max_length=self.tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
@@ -326,26 +315,14 @@ class Inference2D_API:
             imgs_in = process_image(input_image, totensor)
             imgs_in = rearrange(imgs_in.unsqueeze(0).unsqueeze(0), "B Nv C H W -> (B Nv) C H W")
             
-            # Run on CUDA with autocast when available, otherwise run on CPU
-            if torch.cuda.is_available():
-                with torch.autocast("cuda", dtype=weight_dtype):
-                    imgs_in = imgs_in.to("cuda")
-                    # B*Nv images
-                    out = self.validation_pipeline(prompt=prompts, image=imgs_in.to(weight_dtype), generator=self.generator, 
-                                            num_inference_steps=timestep,
-                                            camera_matrixs=camera_matrixs.to(weight_dtype), prompt_ids=prompt_ids, 
-                                            height=val_height, width=val_width, unet_condition_type=self.unet_condition_type, 
-                                            pose_guider=None, pose_image=pose_imgs_in, use_noise=self.use_noise, 
-                                            use_shifted_noise=use_shifted_noise, **self.validation).videos
-            else:
-                imgs_in = imgs_in.to("cpu")
-                out = self.validation_pipeline(prompt=prompts, image=imgs_in.to(weight_dtype), generator=self.generator, 
-                                        num_inference_steps=timestep,
-                                        camera_matrixs=camera_matrixs.to(weight_dtype), prompt_ids=prompt_ids, 
-                                        height=val_height, width=val_width, unet_condition_type=self.unet_condition_type, 
-                                        pose_guider=None, pose_image=pose_imgs_in, use_noise=self.use_noise, 
-                                        use_shifted_noise=use_shifted_noise, **self.validation).videos
-                out = rearrange(out, "B C f H W -> (B f) C H W", f=self.validation.video_length)
+            imgs_in = imgs_in.to(self.device)
+            out = self.validation_pipeline(prompt=prompts, image=imgs_in.to(weight_dtype), generator=self.generator, 
+                                    num_inference_steps=timestep,
+                                    camera_matrixs=camera_matrixs.to(weight_dtype), prompt_ids=prompt_ids, 
+                                    height=val_height, width=val_width, unet_condition_type=self.unet_condition_type, 
+                                    pose_guider=None, pose_image=pose_imgs_in, use_noise=self.use_noise, 
+                                    use_shifted_noise=use_shifted_noise, **self.validation).videos
+            out = rearrange(out, "B C f H W -> (B f) C H W", f=self.validation.video_length)
 
             image_outputs = []
             for bs in range(4):
@@ -354,7 +331,7 @@ class Inference2D_API:
                 img_buf.seek(0)
                 img = Image.open(img_buf)
                 image_outputs.append(img)
-            torch.cuda.empty_cache()
+            # No GPU, so no need to empty CUDA cache
             logging.debug(f"Inference completed successfully. Output images: {len(image_outputs)}")
             return image_outputs 
         except Exception as e:
@@ -394,10 +371,10 @@ def traverse(path, back_proj, smooth_iter):
 
 class Inference3D_API:
 
-    def __init__(self, device="cuda"):
+    def __init__(self, device="cpu"):
         self.cfg = load_config("3D_Stage/configs/infer.yaml", makedirs=False)
         print("Loading system")
-        self.device = device
+    self.device = device
         self.cfg.system.weights = self.cfg.system.weights.replace("./", "./3D_Stage/")
         self.cfg.system.image_tokenizer.pretrained_model_name_or_path = \
             self.cfg.system.image_tokenizer.pretrained_model_name_or_path.replace("./", "./3D_Stage/")
@@ -409,7 +386,7 @@ class Inference3D_API:
     def process_images(self, img_input0, img_input1, img_input2, img_input3, back_proj, smooth_iter):
         meta = json.load(open("./3D_Stage/material/meta.json"))
         c2w_cond = [np.array(loc["transform_matrix"]) for loc in meta["locations"]]
-        c2w_cond = torch.from_numpy(np.stack(c2w_cond, axis=0)).float()[None].to(self.device)
+    c2w_cond = torch.from_numpy(np.stack(c2w_cond, axis=0)).float()[None].to(self.device)
         # save four images
         
         rgb_cond = []
@@ -434,7 +411,7 @@ class Inference3D_API:
             rgb_cond.append(rgb)
         assert len(rgb_cond) == 4, "Please provide 4 images"
 
-        rgb_cond = torch.from_numpy(np.stack(rgb_cond, axis=0)).float()[None].to(self.device)
+    rgb_cond = torch.from_numpy(np.stack(rgb_cond, axis=0)).float()[None].to(self.device)
 
         with torch.no_grad():
             scene_codes = self.system({"rgb_cond": rgb_cond, "c2w_cond": c2w_cond})
@@ -479,7 +456,7 @@ def main():
 
     print("Initializing Inference2D_API...")
     # Auto-select device: use GPU (CUDA) if available, else CPU
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
     print(f"Using device: {device}")
     infer2dapi = Inference2D_API(
         pretrained_model_path=config['pretrained_model_path'],
@@ -494,7 +471,7 @@ def main():
         device=device
     )
     print("Initializing Inference3D_API...")
-    infer3dapi = Inference3D_API()
+    infer3dapi = Inference3D_API(device=device)
     print("Initializing rm_bg_api...")
     remove_api = rm_bg_api()
 
