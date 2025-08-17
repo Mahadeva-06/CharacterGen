@@ -191,14 +191,14 @@ class Inference2D_API:
         use_pose_guider=False,
         use_shifted_noise=False,
         use_noise=True,
-    device="cpu"
+        device="cpu"
     ):
         print("  [2D_API] Start init")
         self.validation = validation
         self.use_noise = use_noise
         self.use_shifted_noise = use_shifted_noise
         self.unet_condition_type = unet_condition_type
-    self.device = device
+        self.device = device
         if unet_from_pretrained_kwargs is None:
             unet_from_pretrained_kwargs = {}
 
@@ -256,14 +256,14 @@ class Inference2D_API:
         print("  [2D_API] Loading ref_unet state dict...")
         ref_unet.load_state_dict(ref_unet_params, strict=False)
 
-    weight_dtype = torch.float32
+        weight_dtype = torch.float32
 
         print("  [2D_API] Moving models to device...")
-    text_encoder.to(self.device, dtype=weight_dtype)
-    image_encoder.to(self.device, dtype=weight_dtype)
-    vae.to(self.device, dtype=weight_dtype)
-    ref_unet.to(self.device, dtype=weight_dtype)
-    unet.to(self.device, dtype=weight_dtype)
+        text_encoder.to(self.device, dtype=weight_dtype)
+        image_encoder.to(self.device, dtype=weight_dtype)
+        vae.to(self.device, dtype=weight_dtype)
+        ref_unet.to(self.device, dtype=weight_dtype)
+        unet.to(self.device, dtype=weight_dtype)
 
         vae.requires_grad_(False)
         unet.requires_grad_(False)
@@ -279,12 +279,12 @@ class Inference2D_API:
         )
         self.validation_pipeline.enable_vae_slicing()
         self.validation_pipeline.set_progress_bar_config(disable=True)
-    self.generator = torch.Generator(device=self.device)
+        self.generator = torch.Generator(device=self.device)
         print("  [2D_API] Init complete")
 
     @torch.no_grad()
     def inference(self, input_image, val_width, val_height, 
-                    use_shifted_noise=False, crop=False, seed=100, timestep=20):
+                 use_shifted_noise=False, crop=False, seed=100, timestep=20):
         try:
             set_seed(seed)
             totensor = transforms.ToTensor()
@@ -374,7 +374,7 @@ class Inference3D_API:
     def __init__(self, device="cpu"):
         self.cfg = load_config("3D_Stage/configs/infer.yaml", makedirs=False)
         print("Loading system")
-    self.device = device
+        self.device = device
         self.cfg.system.weights = self.cfg.system.weights.replace("./", "./3D_Stage/")
         self.cfg.system.image_tokenizer.pretrained_model_name_or_path = \
             self.cfg.system.image_tokenizer.pretrained_model_name_or_path.replace("./", "./3D_Stage/")
@@ -386,9 +386,8 @@ class Inference3D_API:
     def process_images(self, img_input0, img_input1, img_input2, img_input3, back_proj, smooth_iter):
         meta = json.load(open("./3D_Stage/material/meta.json"))
         c2w_cond = [np.array(loc["transform_matrix"]) for loc in meta["locations"]]
-    c2w_cond = torch.from_numpy(np.stack(c2w_cond, axis=0)).float()[None].to(self.device)
+        c2w_cond = torch.from_numpy(np.stack(c2w_cond, axis=0)).float()[None].to(self.device)
         # save four images
-        
         rgb_cond = []
         files = [img_input0, img_input1, img_input2, img_input3]
         new_images = []
@@ -411,7 +410,7 @@ class Inference3D_API:
             rgb_cond.append(rgb)
         assert len(rgb_cond) == 4, "Please provide 4 images"
 
-    rgb_cond = torch.from_numpy(np.stack(rgb_cond, axis=0)).float()[None].to(self.device)
+        rgb_cond = torch.from_numpy(np.stack(rgb_cond, axis=0)).float()[None].to(self.device)
 
         with torch.no_grad():
             scene_codes = self.system({"rgb_cond": rgb_cond, "c2w_cond": c2w_cond})
