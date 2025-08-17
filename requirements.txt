@@ -1,3 +1,5 @@
+# Add custom xformers from external repo
+git+https://github.com/Mahadeva-06/xformers.git
 accelerate==1.10.0
 aiofiles==23.2.1
 altair==5.5.0

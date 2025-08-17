@@ -28,8 +28,19 @@ def get_rank():
     return 0
 
 
+
+def get_best_device():
+    """Return CUDA device if available, else CPU. Print debug info when switching."""
+    if torch.cuda.is_available():
+        print("[DEBUG] Using GPU (CUDA) for inference.")
+        return torch.device("cuda")
+    else:
+        print("[DEBUG] CUDA not available. Using CPU for inference.")
+        return torch.device("cpu")
+
 def get_device():
-    return torch.device("cpu")
+    # For backward compatibility, use get_best_device
+    return get_best_device()
 
 
 def load_module_weights(

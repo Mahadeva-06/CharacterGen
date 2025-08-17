@@ -1,28 +1,46 @@
-import nvdiffrast.torch as dr
-import torch
 
+import torch
 from .typing import *
+
+try:
+    import nvdiffrast.torch as dr
+    NVDIFFRAST_AVAILABLE = True
+except ImportError:
+    NVDIFFRAST_AVAILABLE = False
+
+
+class DummyRasterizerContext:
+    def __init__(self, *args, **kwargs):
+        self.device = kwargs.get('device', torch.device('cpu'))
+
+    def vertex_transform(self, verts, mvp_mtx):
+        # Return input or zeros as a placeholder
+        return torch.zeros((1, verts.shape[0], 4), device=verts.device)
+
+    def rasterize(self, pos, tri, resolution):
+        # Return dummy rasterization output
+        B = pos.shape[0]
+        return torch.zeros((B, 0, 0, 0), device=pos.device)
 
 
 class NVDiffRasterizerContext:
     def __init__(self, context_type: str, device: torch.device) -> None:
         self.device = device
-        self.ctx = self.initialize_context(context_type, device)
+        if device.type == "cpu" or not NVDIFFRAST_AVAILABLE:
+            self.ctx = DummyRasterizerContext(device=device)
+            self.is_dummy = True
+        else:
+            self.ctx = self.initialize_context(context_type, device)
+            self.is_dummy = False
 
     def initialize_context(
         self, context_type: str, device: torch.device
-    ) -> Union[dr.RasterizeGLContext, dr.RasterizeCudaContext]:
-        context_type = "cuda"
-        if context_type == "gl":
-            return dr.RasterizeGLContext(device=device)
-        elif context_type == "cuda":
-            return dr.RasterizeCudaContext(device=device)
-        else:
-            raise ValueError(f"Unknown rasterizer context type: {context_type}")
+    ):
+        return dr.RasterizeCudaContext(device=device) if context_type == "cuda" else dr.RasterizeGLContext(device=device)
 
-    def vertex_transform(
-        self, verts: Float[Tensor, "Nv 3"], mvp_mtx: Float[Tensor, "B 4 4"]
-    ) -> Float[Tensor, "B Nv 4"]:
+    def vertex_transform(self, verts, mvp_mtx):
+        if self.device.type == "cpu" or self.is_dummy:
+            return DummyRasterizerContext().vertex_transform(verts, mvp_mtx)
         with torch.cuda.amp.autocast(enabled=False):
             verts_homo = torch.cat(
                 [verts, torch.ones([verts.shape[0], 1]).to(verts)], dim=-1
@@ -30,13 +48,9 @@ class NVDiffRasterizerContext:
             verts_clip = torch.matmul(verts_homo, mvp_mtx.permute(0, 2, 1))
         return verts_clip
 
-    def rasterize(
-        self,
-        pos: Float[Tensor, "B Nv 4"],
-        tri: Integer[Tensor, "Nf 3"],
-        resolution: Union[int, Tuple[int, int]],
-    ):
-        # rasterize in instance mode (single topology)
+    def rasterize(self, pos, tri, resolution):
+        if self.device.type == "cpu" or self.is_dummy:
+            return DummyRasterizerContext().rasterize(pos, tri, resolution)
         return dr.rasterize(self.ctx, pos.float(), tri.int(), resolution, grad_db=True)
 
     def rasterize_one(

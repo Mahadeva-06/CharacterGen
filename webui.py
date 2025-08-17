@@ -5,6 +5,7 @@ from transformers import CLIPVisionModelWithProjection
 from transformers import CLIPImageProcessor
 from diffusers.models import AutoencoderKL
 from diffusers.schedulers import DDIMScheduler
+from lrm.utils.misc import get_best_device
 import torchvision.transforms as transforms
 import io
 from omegaconf import OmegaConf
@@ -100,6 +101,7 @@ class rm_bg_api:
         alpha_min: float,
         alpha_max: float,
     ) -> list:
+        device = get_best_device()
         process_imgs = []
         for img in imgs:
             img = np.array(img)
