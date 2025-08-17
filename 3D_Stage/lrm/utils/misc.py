@@ -29,7 +29,7 @@ def get_rank():
 
 
 def get_device():
-    return torch.device(f"cuda:{get_rank()}")
+    return torch.device("cpu")
 
 
 def load_module_weights(

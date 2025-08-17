@@ -66,9 +66,7 @@ class DINOV2SingleImageTokenizer(BaseModule):
             # freeze dino backbone parameters
             self.register_non_module(
                 "model",
-                Dinov2Model.from_pretrained(self.cfg.pretrained_model_name_or_path).to(
-                    self.device
-                ),
+                Dinov2Model.from_pretrained(self.cfg.pretrained_model_name_or_path).to("cpu")
             )
 
             model = self.non_module("model")
@@ -78,7 +76,7 @@ class DINOV2SingleImageTokenizer(BaseModule):
         else:
             self.model = Dinov2Model.from_pretrained(
                 self.cfg.pretrained_model_name_or_path
-            ).to(self.device)
+            ).to("cpu")
             model = self.model
 
         if self.cfg.append_plucker_rays:
