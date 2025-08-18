@@ -250,6 +250,9 @@ def main(
 ):
     *_, config = inspect.getargvalues(inspect.currentframe())
 
+    import torch
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA GPU is not available! Please enable GPU runtime or install CUDA drivers.")
     device = "cuda"
 
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_path, subfolder="tokenizer")
