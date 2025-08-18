@@ -92,7 +92,8 @@ class rm_bg_api:
         session_infer_path = hf_hub_download(
             repo_id="skytnt/anime-seg", filename="isnetis.onnx",
         )
-        providers: list[str] = ["CPUExecutionProvider"]
+        # Remove CPU provider, use GPU if available
+        providers: list[str] = ["CUDAExecutionProvider"]
         self.session_infer = rt.InferenceSession(
             session_infer_path, providers=providers,
         )
@@ -195,7 +196,7 @@ class Inference2D_API:
         use_pose_guider=False,
         use_shifted_noise=False,
         use_noise=True,
-        device="cpu"
+        device="cuda"
     ):
         print("  [2D_API] Start init")
         self.validation = validation
@@ -239,21 +240,21 @@ class Inference2D_API:
         print("  [2D_API] Loading unet_params...")
         unet_params_path = os.path.join(ckpt_dir, "pytorch_model.bin")
         print(f"    [2D_API] unet_params_path: {unet_params_path}")
-        unet_params = torch.load(unet_params_path, map_location="cpu")
+        unet_params = torch.load(unet_params_path, map_location="cuda")
         if use_pose_guider:
             print("  [2D_API] Loading pose_guider_params...")
             pose_guider_params_path = os.path.join(ckpt_dir, "pytorch_model_1.bin")
             print(f"    [2D_API] pose_guider_params_path: {pose_guider_params_path}")
-            pose_guider_params = torch.load(pose_guider_params_path, map_location="cpu")
+            pose_guider_params = torch.load(pose_guider_params_path, map_location="cuda")
             ref_unet_params_path = os.path.join(ckpt_dir, "pytorch_model_2.bin")
             print(f"    [2D_API] ref_unet_params_path: {ref_unet_params_path}")
-            ref_unet_params = torch.load(ref_unet_params_path, map_location="cpu")
+            ref_unet_params = torch.load(ref_unet_params_path, map_location="cuda")
             print("  [2D_API] Loading pose_guider state dict...")
             pose_guider.load_state_dict(pose_guider_params)
         else:
             ref_unet_params_path = os.path.join(ckpt_dir, "pytorch_model_1.bin")
             print(f"    [2D_API] ref_unet_params_path: {ref_unet_params_path}")
-            ref_unet_params = torch.load(ref_unet_params_path, map_location="cpu")
+            ref_unet_params = torch.load(ref_unet_params_path, map_location="cuda")
         print("  [2D_API] Loading unet state dict...")
         print("DEBUG: unet is", unet)
         unet.load_state_dict(unet_params)
@@ -375,7 +376,7 @@ def traverse(path, back_proj, smooth_iter):
 
 class Inference3D_API:
 
-    def __init__(self, device="cpu"):
+    def __init__(self, device="cuda"):
         self.cfg = load_config("3D_Stage/configs/infer.yaml", makedirs=False)
         print("Loading system")
         self.device = device
@@ -458,8 +459,10 @@ def main():
     unet_from_pretrained_kwargs = config.get('unet_from_pretrained_kwargs', {})
 
     print("Initializing Inference2D_API...")
-    # Auto-select device: use GPU (CUDA) if available, else CPU
-    device = 'cpu'
+    # Force GPU (CUDA) only. Error if not available.
+    import torch
+    assert torch.cuda.is_available(), "CUDA GPU is not available! Please enable GPU runtime."
+    device = torch.device("cuda")
     print(f"Using device: {device}")
     infer2dapi = Inference2D_API(
         pretrained_model_path=config['pretrained_model_path'],
