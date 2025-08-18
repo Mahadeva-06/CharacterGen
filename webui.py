@@ -1,4 +1,6 @@
+import sys
 import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "3D_Stage")))
 os.environ["HF_HOME"] = "D:/huggingface_cache"
 from transformers import CLIPTokenizer, CLIPTextModel
 from transformers import CLIPVisionModelWithProjection
